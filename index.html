@@ -776,8 +776,7 @@
                     const isTooSoon = isWithin30Minutes(slot);
 
                     if (booking) {
-                        const fullText = (booking.title || '') + ' ' + (booking.description || '');
-                        const isPersonal = fullText.includes('個人利用') || fullText.includes('シェア');
+                        const isPersonal = isPersonalBooking(booking);
 
                         if (isPersonal) {
                             // ★修正: 個人利用予約は30分スロット単位で個別判定
@@ -855,8 +854,7 @@
                     html += '<div class="time-label-mobile">' + timeStr + '</div>';
                     
                     if (booking) {
-                        const fullText = (booking.title || '') + ' ' + (booking.description || '');
-                        const isPersonal = fullText.includes('個人利用') || fullText.includes('シェア');
+                        const isPersonal = isPersonalBooking(booking);
 
                         if (isPersonal) {
                             // ★修正: 個人利用予約は30分スロット単位で個別判定
@@ -906,6 +904,16 @@
             document.getElementById('calendarGrid').innerHTML = html;
         }
         
+        // ★修正：個人利用判定はタイトルのみで行う
+        // IDS発行の予約タイトルは必ず「○○ 様 - 個人利用（シェア）」または「○○ 様 - レンタル（貸切）」の形式。
+        // Spacemarket等の外部予約は description に「[利用形態] 個人利用」という文字列が含まれることがあり、
+        // それを個人利用予約と誤判定すると貸切時間帯にシェア予約が取れてしまう（二重予約バグ）。
+        // → 判定は title のみに限定する。
+        function isPersonalBooking(booking) {
+            const title = booking.title || '';
+            return title.includes('個人利用') || title.includes('シェア');
+        }
+
         // ★修正①：30分スロット単位で予約を検索
         // 「個人利用・シェア」以外のイベント（正規練等の手動イベント含む）を優先返却
         function findBookingAtSlot(studio, slot) {
@@ -914,8 +922,7 @@
                 if (booking.studio === studio && 
                     slot >= booking.startSlot && 
                     slot < booking.startSlot + booking.durationSlots) {
-                    const fullText = (booking.title || '') + ' ' + (booking.description || '');
-                    if (!fullText.includes('個人利用') && !fullText.includes('シェア')) {
+                    if (!isPersonalBooking(booking)) {
                         // ブロックイベント（正規練・レンタル等）を優先返却
                         return { ...booking, isStart: slot === booking.startSlot };
                     }
@@ -959,8 +966,7 @@
                 if (booking.studio === studio &&
                     slot >= booking.startSlot &&
                     slot < booking.startSlot + booking.durationSlots) {
-                    const fullText = (booking.title || '') + ' ' + (booking.description || '');
-                    if (fullText.includes('個人利用') || fullText.includes('シェア')) {
+                    if (isPersonalBooking(booking)) {
                         count++;
                     }
                 }
@@ -975,8 +981,7 @@
                 if (booking.studio === studio && 
                     slot >= booking.startSlot && 
                     slot < booking.startSlot + booking.durationSlots) {
-                    const fullText = (booking.title || '') + ' ' + (booking.description || '');
-                    if (!fullText.includes('個人利用') && !fullText.includes('シェア')) {
+                    if (!isPersonalBooking(booking)) {
                         return true;
                     }
                 }
