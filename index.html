@@ -235,17 +235,32 @@
             cursor: not-allowed;
         }
 
-        /* ★7日表示：スマホ版 日付ヘッダー */
-        .mobile-date-header {
-            background: #4a5568;
-            color: white;
-            padding: 12px 10px;
-            font-weight: 600;
-            font-size: 15px;
-            text-align: center;
-            position: sticky;
-            top: 0;
-            z-index: 20;
+        /* ★7日表示：スマホ版 3日ずつ横並びのコンパクトグリッド */
+        .week-grid.mobile-grid {
+            border-radius: 8px;
+            margin: 0 8px 18px;
+        }
+
+        .week-grid.mobile-grid .week-corner,
+        .week-grid.mobile-grid .day-header {
+            font-size: 11px;
+            padding: 8px 2px;
+        }
+
+        .week-grid.mobile-grid .studio-subheader {
+            font-size: 10px;
+            padding: 4px 1px;
+        }
+
+        .week-grid.mobile-grid .week-time-label {
+            font-size: 9px;
+            padding: 6px 1px;
+        }
+
+        .week-grid.mobile-grid .week-cell {
+            min-height: 30px; /* タッチしやすく */
+            padding: 6px 0;
+            font-size: 13px;
         }
 
         /* スマホ対応：縦レイアウト */
@@ -777,28 +792,31 @@
             return 'occupied';
         }
 
-        // PC版：週間グリッド表示（縦＝時間、横＝7日。各日付の下にスタジオを2列表示）
-        function renderDesktopCalendar(studios) {
-            const cols = displayDates.length * studios.length;
-            let html = '<div class="studio-week">';
-            html += '<div class="week-grid" style="grid-template-columns: 60px repeat(' + cols + ', 1fr);">';
+        // 週間グリッド1ブロックを生成（PC/スマホ共通）
+        // dates: 表示する日付の配列、isMobile: スマホ用コンパクト表示
+        function buildWeekGrid(studios, dates, isMobile) {
+            const cols = dates.length * studios.length;
+            const gridClass = isMobile ? 'week-grid mobile-grid' : 'week-grid';
+            const timeColWidth = isMobile ? '38px' : '60px';
+
+            let html = '<div class="' + gridClass + '" style="grid-template-columns: ' + timeColWidth + ' repeat(' + cols + ', 1fr);">';
 
             // ヘッダー1行目：左上の角（2行分） + 日付（スタジオ数分の幅）
             html += '<div class="week-corner" style="grid-row: span ' + (studios.length > 1 ? 2 : 1) + ';">時間</div>';
-            displayDates.forEach(date => {
+            dates.forEach(date => {
                 html += '<div class="day-header" style="grid-column: span ' + studios.length + ';">' + formatDateLabel(date) + '</div>';
             });
 
             // ヘッダー2行目：各日付の下にスタジオ名（複数スタジオ時のみ）
             if (studios.length > 1) {
-                displayDates.forEach(() => {
+                dates.forEach(() => {
                     studios.forEach(studio => {
                         html += '<div class="studio-subheader">' + studio + '</div>';
                     });
                 });
             }
 
-            // 48スロット × 7日 × スタジオ
+            // 48スロット × 日数 × スタジオ
             for (let slot = 0; slot < 48; slot++) {
                 const hour = Math.floor(slot / 2);
                 const minute = (slot % 2) * 30;
@@ -807,7 +825,7 @@
 
                 html += '<div class="week-time-label' + hourClass + '">' + timeStr + '</div>';
 
-                displayDates.forEach(date => {
+                dates.forEach(date => {
                     studios.forEach((studio, si) => {
                         const dayClass = (si === 0) ? ' day-start' : '';
                         const status = getSlotStatus(studio, date, slot);
@@ -825,54 +843,27 @@
                 });
             }
 
-            html += '</div></div>';
+            html += '</div>';
+            return html;
+        }
 
+        // PC版：週間グリッド表示（縦＝時間、横＝7日。各日付の下にスタジオを2列表示）
+        function renderDesktopCalendar(studios) {
+            const html = '<div class="studio-week">' + buildWeekGrid(studios, displayDates, false) + '</div>';
             document.getElementById('calendarGrid').innerHTML = html;
         }
 
-        // スマホ版：7日分を縦に全表示（日付ごとに縦タイムライン）
+        // スマホ版：3日ずつ横並びのグリッドを縦に積む（3日+3日+1日）
         function renderMobileCalendar(studios) {
-            let html = '';
+            const DAYS_PER_ROW = 3;
+            let html = '<div style="padding-top: 10px;">';
 
-            displayDates.forEach(date => {
-                html += '<div class="mobile-date-header">' + formatDateLabel(date) + '</div>';
+            for (let i = 0; i < displayDates.length; i += DAYS_PER_ROW) {
+                const chunk = displayDates.slice(i, i + DAYS_PER_ROW);
+                html += buildWeekGrid(studios, chunk, true);
+            }
 
-                const containerClass = studios.length === 1 ? 'studios-container single' : 'studios-container';
-                html += '<div class="' + containerClass + '">';
-
-                studios.forEach(studio => {
-                    html += '<div class="studio-section">';
-                    html += '<div class="studio-section-header">' + studio + ' Studio</div>';
-
-                    for (let slot = 0; slot < 48; slot++) {
-                        const hour = Math.floor(slot / 2);
-                        const minute = (slot % 2) * 30;
-                        const timeStr = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
-
-                        const status = getSlotStatus(studio, date, slot);
-
-                        html += '<div class="time-slot-mobile">';
-                        html += '<div class="time-label-mobile">' + timeStr + '</div>';
-
-                        if (status === 'available') {
-                            html += '<div class="time-content-mobile" onclick="openBookingModal(\'' + studio + '\', \'' + date + '\', ' + slot + ')"><div style="padding: 8px 5px; font-size: 16px; color: #4CAF50; font-weight: bold; text-align: center;">○</div></div>';
-                        } else if (status === 'joinable') {
-                            html += '<div class="time-content-mobile personal" onclick="openBookingModal(\'' + studio + '\', \'' + date + '\', ' + slot + ')"><div style="padding: 8px 5px; font-size: 16px; color: #4CAF50; font-weight: bold; text-align: center;">○</div></div>';
-                        } else if (status === 'tooSoon') {
-                            html += '<div class="time-content-mobile" style="background: #f5f5f5; cursor: not-allowed;"><div style="padding: 8px 5px; font-size: 16px; color: #999; text-align: center;">×</div></div>';
-                        } else {
-                            html += '<div class="time-content-mobile occupied"><div style="padding: 8px 5px; font-size: 16px; color: #999; font-weight: bold; text-align: center;">×</div></div>';
-                        }
-
-                        html += '</div>';
-                    }
-
-                    html += '</div>';
-                });
-
-                html += '</div>';
-            });
-
+            html += '</div>';
             document.getElementById('calendarGrid').innerHTML = html;
         }
 
