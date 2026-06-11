@@ -535,9 +535,9 @@
         </div>
 
         <div class="controls">
-            <button onclick="shiftWeek(-1)">◀ 前の7日</button>
+            <button id="prevBtn" onclick="shiftWeek(-1)">◀ 前の7日</button>
             <input type="date" id="selectedDate" onchange="loadBookings()">
-            <button onclick="shiftWeek(1)">次の7日 ▶</button>
+            <button id="nextBtn" onclick="shiftWeek(1)">次の7日 ▶</button>
             <select id="studioFilter" onchange="loadBookings()">
                 <option value="all">全スタジオ</option>
                 <option value="A">A Studio</option>
@@ -625,8 +625,10 @@
         const API_URL = 'https://script.google.com/macros/s/AKfycbzBznDLEP8s22f2ZcNHrjnvVtZxLu-FEkJtvnSxwK0qq70DtQRJLUdVUxARlfOca7fe/exec';
         // ★B7: パスワードはGAS側に移動。フロントには平文を残さない。
         const MEMBER_TOKEN_KEY = 'idsMemberToken';
-        // ★7日表示
-        const DAYS_TO_SHOW = 7;
+        // ★表示日数：PC=7日、スマホ=3日
+        function getDaysToShow() {
+            return window.innerWidth <= 768 ? 3 : 7;
+        }
 
         let userType = 'general';
         let memberToken = null;
@@ -666,10 +668,10 @@
             return addDays(dateStr, -1);
         }
 
-        // 表示開始日を±7日シフト
+        // 表示開始日を表示日数分シフト（PC=±7日、スマホ=±3日）
         function shiftWeek(n) {
             const cur = document.getElementById('selectedDate').value;
-            document.getElementById('selectedDate').value = addDays(cur, n * DAYS_TO_SHOW);
+            document.getElementById('selectedDate').value = addDays(cur, n * getDaysToShow());
             loadBookings();
         }
 
@@ -686,9 +688,14 @@
         function loadBookings() {
             const startDate = document.getElementById('selectedDate').value;
             const studio = document.getElementById('studioFilter').value;
+            const daysToShow = getDaysToShow();
+
+            // 前/次ボタンのラベルを表示日数に合わせる
+            document.getElementById('prevBtn').textContent = '◀ 前の' + daysToShow + '日';
+            document.getElementById('nextBtn').textContent = '次の' + daysToShow + '日 ▶';
 
             displayDates = [];
-            for (let i = 0; i < DAYS_TO_SHOW; i++) {
+            for (let i = 0; i < daysToShow; i++) {
                 displayDates.push(addDays(startDate, i));
             }
             // 開始日の前日も取得（spillover補正用）
@@ -1233,11 +1240,16 @@
         }
 
         // ウィンドウリサイズ時にカレンダーを再描画
+        // 表示日数（PC=7日/スマホ=3日）が変わった場合はデータも再取得
         let resizeTimer;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function() {
-                renderCalendar();
+                if (getDaysToShow() !== displayDates.length) {
+                    loadBookings();
+                } else {
+                    renderCalendar();
+                }
             }, 250);
         });
     </script>
