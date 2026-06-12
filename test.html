@@ -548,7 +548,7 @@
 </head>
 <body>
 <div style="background:#ff5722;color:#fff;padding:10px;text-align:center;font-weight:bold;position:sticky;top:0;z-index:9999;">
-🚧 テスト環境 - 開発検証用ページです。本番予約は別URL（/ids-booking/）からお願いします 🚧
+🚧 テスト環境 v2 - PaymentFor連携テスト用ページです。本番予約は別URL（/ids-booking/）からお願いします 🚧
 </div>
 
     <div class="container">
@@ -617,12 +617,25 @@
                     <option value="6">6時間</option>
                 </select>
             </div>
-            
+
             <div class="price-display" id="priceDisplay">¥0</div>
-            
+
+            <!-- ★ v2追加: 決済方法選択 -->
+            <div class="form-group" id="paymentMethodGroup" style="background:#f5f5ff; padding:16px; border-radius:8px; border:1px solid #d5d5ee;">
+                <label style="font-weight:bold; margin-bottom:10px; display:block;">💳 決済方法を選択してください</label>
+                <label style="display:flex; align-items:center; padding:10px; cursor:pointer; border-radius:6px; transition:background 0.2s;" onmouseover="this.style.background='#e8e8ff'" onmouseout="this.style.background='transparent'">
+                    <input type="radio" name="paymentMethod" value="credit" checked style="margin-right:10px; width:18px; height:18px;">
+                    <span>💳 <strong>クレジットカード</strong> <small style="color:#666">（VISA / MASTER / JCB / AMEX / DINERS）</small></span>
+                </label>
+                <label style="display:flex; align-items:center; padding:10px; cursor:pointer; border-radius:6px; transition:background 0.2s;" onmouseover="this.style.background='#e8e8ff'" onmouseout="this.style.background='transparent'">
+                    <input type="radio" name="paymentMethod" value="paypay" style="margin-right:10px; width:18px; height:18px;">
+                    <span>📱 <strong>PayPay</strong> <small style="color:#666">（アプリ・ブラウザ）</small></span>
+                </label>
+            </div>
+
             <div class="button-group">
                 <button class="btn-secondary" onclick="closeModal()">キャンセル</button>
-                <button class="btn-primary" onclick="submitBooking()">予約確定</button>
+                <button class="btn-primary" onclick="proceedToPayment()">決済へ進む →</button>
             </div>
         </div>
     </div>
@@ -1167,6 +1180,77 @@
         }
         
         // 予約送信
+        // ★ v2追加: 決済画面へ進むフロー（PaymentForリンク方式対応）
+        // GASに action=create_pending でPOST → GASが自動POSTフォームHTMLを返却
+        // → ブラウザがPaymentFor決済画面に遷移
+        function proceedToPayment() {
+            const name = document.getElementById('customerName').value.trim();
+            const email = document.getElementById('customerEmail').value.trim();
+            const phone = document.getElementById('customerPhone').value.trim();
+
+            if (!name || !email || !phone) {
+                alert('お名前・メール・電話番号を全て入力してください');
+                return;
+            }
+
+            const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+
+            const data = {
+                action: 'create_pending',
+                name: name,
+                email: email,
+                phone: phone,
+                studio: selectedBooking.studio + ' Studio',
+                usageType: document.getElementById('usageType').value === 'rental' ? 'レンタル（貸切）' : '個人利用（シェア）',
+                userType: userType === 'member' ? 'メンバー' : '一般',
+                date: selectedBooking.date,
+                time: selectedBooking.time,
+                duration: document.getElementById('duration').value,
+                price: document.getElementById('priceDisplay').textContent,
+                paymentMethod: paymentMethod
+            };
+
+            if (userType === 'member' && memberToken) {
+                data.memberToken = memberToken;
+            }
+
+            const confirmMsg =
+                '【予約内容の確認】\n\n' +
+                'スタジオ: ' + data.studio + '\n' +
+                '日時: ' + data.date + ' ' + data.time + '〜（' + data.duration + '時間）\n' +
+                '料金: ' + data.price + '\n' +
+                '決済方法: ' + (paymentMethod === 'paypay' ? 'PayPay' : 'クレジットカード') + '\n\n' +
+                'よろしければ「OK」を押してください。PaymentFor決済画面に遷移します。';
+            if (!confirm(confirmMsg)) return;
+
+            // フォーム動的生成 → GASへPOST submit（応答HTMLがブラウザで実行される）
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = API_URL;
+            form.target = '_self';
+            form.style.display = 'none';
+
+            for (const key in data) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = data[key];
+                form.appendChild(input);
+            }
+            document.body.appendChild(form);
+
+            // 進行中の表示
+            const buttons = document.querySelectorAll('.btn-primary');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                if (btn.textContent.includes('決済')) btn.textContent = '遷移中...';
+            });
+
+            // 送信
+            form.submit();
+        }
+
+        // 旧フロー（試験的に残してある。本実装では非推奨）
         function submitBooking() {
             const name = document.getElementById('customerName').value;
             const email = document.getElementById('customerEmail').value;
