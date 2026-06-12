@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>[TEST] IDS予約カレンダー - 開発環境</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+            }
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .container {
+                border-radius: 0;
+            }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .header {
+                padding: 20px 10px;
+            }
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.5rem;
+            }
+            
+            .header p {
+                font-size: 0.9rem;
+            }
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #fafafa;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .controls {
+                padding: 15px 10px;
+                gap: 10px;
+            }
+        }
+        
+        .controls select, .controls input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .controls select, .controls input {
+                padding: 12px;
+                font-size: 16px; /* iOS のズーム防止 */
+                flex: 1;
+                min-width: 120px;
+            }
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .controls button {
+                padding: 12px 16px;
+                font-size: 14px;
+                min-height: 44px; /* タッチしやすいサイズ */
+            }
+        }
+        
+        .controls button:hover {
+            background: #5568d3;
+        }
+        
+        .calendar-view {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* スマホ対応：縦スクロール */
+        @media (max-width: 768px) {
+            .calendar-view {
+                overflow-x: visible;
+                overflow-y: auto;
+            }
+        }
+        
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: 150px repeat(48, minmax(60px, 1fr));
+            min-width: 1600px;
+        }
+        
+        /* スマホ対応：縦レイアウト */
+        @media (max-width: 768px) {
+            .calendar-grid {
+                display: block;
+                min-width: auto;
+            }
+            
+            /* 全スタジオ選択時は2列グリッド */
+            .studios-container {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .studios-container.single {
+                grid-template-columns: 1fr;
+            }
+            
+            /* スタジオごとにセクション分け */
+            .studio-section {
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+            
+            .studio-section-header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 12px 8px;
+                font-weight: 600;
+                font-size: 14px;
+                text-align: center;
+                position: sticky;
+                top: 0;
+                z-index: 5;
+            }
+            
+            .time-slot-mobile {
+                display: grid;
+                grid-template-columns: 60px 1fr;
+                border-bottom: 1px solid #e0e0e0;
+                min-height: 50px;
+                align-items: center;
+                background: white;
+            }
+            
+            .time-label-mobile {
+                background: #f5f5f5;
+                padding: 10px 5px;
+                font-weight: 600;
+                font-size: 11px;
+                text-align: center;
+                border-right: 1px solid #e0e0e0;
+            }
+            
+            .time-content-mobile {
+                padding: 8px 5px;
+                min-height: 50px;
+                position: relative;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+            
+            .time-content-mobile:hover {
+                background: #f0f7ff;
+            }
+            
+            .time-content-mobile.occupied {
+                background: #ffebee;
+                cursor: not-allowed;
+            }
+            
+            .time-content-mobile.occupied:hover {
+                background: #ffcdd2;
+            }
+            
+            .time-content-mobile.personal {
+                background: #fff3e0;
+                cursor: pointer;
+            }
+            
+            .booking-label-mobile {
+                background: #ef5350;
+                color: white;
+                padding: 8px 5px;
+                border-radius: 4px;
+                text-align: center;
+                font-weight: 600;
+                font-size: 11px;
+                line-height: 1.3;
+            }
+            
+            .booking-label-mobile small {
+                font-size: 9px;
+                opacity: 0.9;
+                display: block;
+                margin-top: 2px;
+            }
+            
+            .booking-label-mobile.personal {
+                background: #ff9800;
+            }
+        }
+        
+        .time-header {
+            position: sticky;
+            left: 0;
+            background: #f5f5f5;
+            padding: 10px;
+            text-align: center;
+            border-right: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            font-size: 12px;
+            z-index: 10;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .time-header {
+                padding: 8px 5px;
+                font-size: 11px;
+            }
+        }
+        
+        .time-slot {
+            border-right: 1px solid #f0f0f0;
+            border-bottom: 1px solid #e0e0e0;
+            text-align: center;
+            padding: 5px;
+            font-size: 11px;
+            color: #666;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .time-slot {
+                padding: 8px 2px;
+                font-size: 9px;
+            }
+        }
+        
+        .studio-row {
+            position: sticky;
+            left: 0;
+            background: white;
+            padding: 15px 10px;
+            border-right: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            z-index: 9;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .studio-row {
+                padding: 12px 5px;
+                font-size: 13px;
+            }
+        }
+        
+        .time-cell {
+            border-right: 1px solid #f0f0f0;
+            border-bottom: 1px solid #e0e0e0;
+            min-height: 60px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .time-cell {
+                min-height: 70px; /* タッチしやすく */
+            }
+        }
+        
+        .time-cell:hover {
+            background: #f0f7ff;
+        }
+        
+        .time-cell.occupied {
+            background: #ffebee;
+            cursor: not-allowed;
+        }
+        
+        .time-cell.occupied:hover {
+            background: #ffcdd2;
+        }
+        
+        .booking-bar {
+            position: absolute;
+            top: 5px;
+            bottom: 5px;
+            left: 2px;
+            right: 2px;
+            background: #ef5350;
+            border-radius: 4px;
+            padding: 5px;
+            color: white;
+            font-size: 11px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            line-height: 1.2;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .modal-content {
+                padding: 20px;
+                width: 95%;
+                max-height: 85vh;
+                border-radius: 12px 12px 0 0;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                animation: slideUp 0.3s ease-out;
+            }
+            
+            @keyframes slideUp {
+                from {
+                    transform: translateY(100%);
+                }
+                to {
+                    transform: translateY(0);
+                }
+            }
+        }
+        
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .modal-content h2 {
+                font-size: 1.3rem;
+                margin-bottom: 15px;
+            }
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .form-group {
+                margin-bottom: 15px;
+            }
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .form-group label {
+                font-size: 14px;
+            }
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .form-group input, .form-group select {
+                padding: 14px;
+                font-size: 16px; /* iOS のズーム防止 */
+                border-width: 2px;
+            }
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .info-box {
+                padding: 12px;
+                font-size: 13px;
+            }
+        }
+        
+        .price-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .price-display {
+                font-size: 28px;
+                padding: 15px;
+            }
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .button-group button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .button-group button {
+                padding: 16px;
+                font-size: 16px;
+                min-height: 50px; /* タッチしやすく */
+                font-weight: 600;
+            }
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #ddd;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background: #ccc;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+<div style="background:#ff5722;color:#fff;padding:10px;text-align:center;font-weight:bold;position:sticky;top:0;z-index:9999;">
+🚧 テスト環境 - 開発検証用ページです。本番予約は別URL（/ids-booking/）からお願いします 🚧
+</div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🎵 IDS予約カレンダー</h1>
+            <p>Inohana Dance Studio - 24時間営業</p>
+        </div>
+        
+        <div class="controls">
+            <input type="date" id="selectedDate" onchange="loadBookings()">
+            <select id="studioFilter" onchange="loadBookings()">
+                <option value="all">全スタジオ</option>
+                <option value="A">A Studio</option>
+                <option value="B">B Studio</option>
+            </select>
+            <button onclick="loadBookings()">🔄 更新</button>
+            <button id="loginBtn" onclick="showLogin()">🔒 メンバーログイン</button>
+        </div>
+        
+        <div class="calendar-view">
+            <div id="calendarGrid" class="loading">読み込み中...</div>
+        </div>
+    </div>
+    
+    <!-- 予約フォームモーダル -->
+    <div class="modal" id="bookingModal">
+        <div class="modal-content">
+            <h2>予約情報入力</h2>
+            
+            <div class="info-box">
+                <div><strong>スタジオ:</strong> <span id="modalStudio"></span></div>
+                <div><strong>日時:</strong> <span id="modalDateTime"></span></div>
+            </div>
+            
+            <div class="form-group">
+                <label>お名前 *</label>
+                <input type="text" id="customerName" placeholder="山田太郎">
+            </div>
+            
+            <div class="form-group">
+                <label>メールアドレス *</label>
+                <input type="email" id="customerEmail" placeholder="example@gmail.com">
+            </div>
+            
+            <div class="form-group">
+                <label>電話番号 *</label>
+                <input type="tel" id="customerPhone" placeholder="090-1234-5678">
+            </div>
+            
+            <div class="form-group">
+                <label>利用タイプ</label>
+                <select id="usageType" onchange="calculatePrice()">
+                    <option value="rental">レンタル（貸切）</option>
+                    <option value="personal" id="personalOption">個人利用（シェア）- メンバー専用</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>利用時間</label>
+                <select id="duration" onchange="calculatePrice()">
+                    <option value="1">1時間</option>
+                    <option value="2" selected>2時間</option>
+                    <option value="3">3時間</option>
+                    <option value="4">4時間</option>
+                    <option value="5">5時間</option>
+                    <option value="6">6時間</option>
+                </select>
+            </div>
+            
+            <div class="price-display" id="priceDisplay">¥0</div>
+            
+            <div class="button-group">
+                <button class="btn-secondary" onclick="closeModal()">キャンセル</button>
+                <button class="btn-primary" onclick="submitBooking()">予約確定</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- ログインモーダル -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <h2>🔒 メンバーログイン</h2>
+            <div class="form-group">
+                <label>パスワード</label>
+                <input type="password" id="loginPassword" placeholder="パスワードを入力">
+            </div>
+            <div class="button-group">
+                <button class="btn-secondary" onclick="closeLogin()">キャンセル</button>
+                <button class="btn-primary" onclick="login()">ログイン</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ★テスト用GAS Web App URL - デプロイ後に差し替えてください
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxGqiE8TQ2lxd1Uj54aLhd9v90APlJoITPOXmUrNJ0o6J3I8Iq8rSKETBddWLrOB2PyoQ/exec';
+        // ★B7: パスワードはGAS側に移動。フロントには平文を残さない。
+        const MEMBER_TOKEN_KEY = 'idsMemberToken';
+
+        let userType = 'general';
+        let memberToken = null;
+        let bookings = [];
+        let selectedBooking = {};
+
+        // 初期化
+        window.onload = function() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('selectedDate').value = today;
+
+            // ★B7: localStorageから保存済みトークンを復元
+            const savedToken = localStorage.getItem(MEMBER_TOKEN_KEY);
+            if (savedToken) {
+                memberToken = savedToken;
+                userType = 'member';
+                document.getElementById('loginBtn').textContent = '🔓 ログアウト';
+                document.getElementById('loginBtn').onclick = logout;
+            }
+
+            loadBookings();
+        };
+        
+        // 日付文字列(yyyy-mm-dd)から前日の日付文字列を返す
+        function getPreviousDateStr(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            d.setDate(d.getDate() - 1);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
+
+        // 予約データ読み込み（日跨ぎ予約の重複返却を補正）
+        // ★日跨ぎ対応：GASは日跨ぎ予約を開始日と終了日の両方で同じstartHour/durationで返してくる。
+        //   翌日視点では「0:00から(終了時刻)まで」のspilloverとして再表示する。
+        function loadBookings() {
+            const date = document.getElementById('selectedDate').value;
+            const studio = document.getElementById('studioFilter').value;
+            const prevDate = getPreviousDateStr(date);
+
+            document.getElementById('calendarGrid').innerHTML = '<div class="loading">読み込み中...</div>';
+
+            // 当日と前日を並列取得
+            Promise.all([
+                fetch(API_URL + '?action=list&date=' + date + '&studio=' + studio).then(r => r.json()),
+                fetch(API_URL + '?action=list&date=' + prevDate + '&studio=' + studio).then(r => r.json())
+            ])
+            .then(([todayData, prevData]) => {
+                const todayRaw = todayData.bookings || [];
+                const prevRaw = prevData.bookings || [];
+                console.log('取得した予約データ (当日):', todayRaw);
+                console.log('取得した予約データ (前日):', prevRaw);
+
+                // 前日のうち、日跨ぎ予約（startHour + duration > 24）を抽出
+                const prevCrossDay = prevRaw.filter(b => (b.startHour + b.duration) > 24);
+
+                // 当日のデータから、前日の日跨ぎ予約と一致するもの（GASによる重複返却）を除外
+                // 一致判定: studio + startHour + duration + title + description
+                const isSameBooking = (a, b) =>
+                    a.studio === b.studio &&
+                    a.startHour === b.startHour &&
+                    a.duration === b.duration &&
+                    (a.title || '') === (b.title || '') &&
+                    (a.description || '') === (b.description || '');
+                const todayFiltered = todayRaw.filter(b => !prevCrossDay.some(p => isSameBooking(p, b)));
+
+                // 前日の日跨ぎ予約を、当日の 0:00 開始の spillover として変換
+                const spillovers = prevCrossDay.map(b => ({
+                    ...b,
+                    startHour: 0,
+                    duration: (b.startHour + b.duration) - 24,
+                    _isSpillover: true
+                }));
+
+                const allBookings = [...spillovers, ...todayFiltered];
+
+                bookings = allBookings.map(b => {
+                    const startSlot = Math.floor(b.startHour * 2);
+                    const durationSlots = Math.ceil(b.duration * 2);
+
+                    console.log('予約変換:', b.title, 'startHour=' + b.startHour, 'startSlot=' + startSlot, 'duration=' + b.duration, 'durationSlots=' + durationSlots, b._isSpillover ? '[前日からのspillover]' : '');
+
+                    return {
+                        ...b,
+                        startSlot: startSlot,
+                        durationSlots: durationSlots
+                    };
+                });
+
+                console.log('変換後の予約データ:', bookings);
+                renderCalendar();
+            })
+            .catch(err => {
+                console.error('読み込みエラー:', err);
+                document.getElementById('calendarGrid').innerHTML = '<div class="loading">エラーが発生しました</div>';
+            });
+        }
+        
+        // カレンダー描画
+        function renderCalendar() {
+            const studioFilter = document.getElementById('studioFilter').value;
+            const studios = studioFilter === 'all' ? ['A', 'B'] : [studioFilter];
+            
+            const isMobile = window.innerWidth <= 768;
+            
+            if (isMobile) {
+                renderMobileCalendar(studios);
+            } else {
+                renderDesktopCalendar(studios);
+            }
+        }
+        
+        // PC版：横グリッド表示
+        function renderDesktopCalendar(studios) {
+            let html = '<div class="calendar-grid" style="grid-template-columns: 150px repeat(48, minmax(60px, 1fr));">';
+            
+            html += '<div class="time-header">スタジオ</div>';
+            for (let h = 0; h < 24; h++) {
+                html += '<div class="time-slot">' + String(h).padStart(2, '0') + ':00</div>';
+                html += '<div class="time-slot">' + String(h).padStart(2, '0') + ':30</div>';
+            }
+            
+            studios.forEach(studio => {
+                html += '<div class="studio-row">' + studio + ' Studio</div>';
+
+                let cellCount = 0;
+
+                for (let slot = 0; slot < 48; slot++) {
+                    const booking = findBookingAtSlot(studio, slot);
+                    // ★時間制限を30分に統一（空き枠・既存個人利用枠とも現時刻+30分以降ならOK）
+                    const isTooSoon = isWithin30Minutes(slot);
+
+                    if (booking) {
+                        const isPersonal = isPersonalBooking(booking);
+
+                        if (isPersonal) {
+                            // ★修正: 個人利用予約は30分スロット単位で個別判定
+                            // 開始時刻が90分以内でも、後続スロット（90分以遠）には追加予約可能
+                            const personalCount = countPersonalAtSlot(studio, slot);
+                            const isJoinable = studio === 'A' && userType === 'member' && personalCount < 5 && !isTooSoon;
+
+                            if (isJoinable) {
+                                html += '<div class="time-cell" style="background: #fff3e0; cursor: pointer;" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')">' +
+                                    '<div style="padding: 5px; font-size: 11px; color: #e65100; font-weight: bold;">○</div>' +
+                                    '</div>';
+                            } else {
+                                html += '<div class="time-cell occupied"><div style="padding: 5px; font-size: 11px;">×</div></div>';
+                            }
+                            cellCount++;
+                        } else {
+                            // レンタル/ブロックイベントは従来通り大きな枠で表示
+                            if (booking.isStart) {
+                                const span = Math.min(booking.durationSlots || 1, 48 - slot);
+                                html += '<div class="time-cell occupied" style="grid-column: span ' + span + ';">' +
+                                    '<div class="booking-bar">×</div>' +
+                                    '</div>';
+                                cellCount += span;
+                            }
+                            // 継続スロットはspanで覆われるため何もしない
+                        }
+                    } else {
+                        const personalCount = countPersonalAtSlot(studio, slot);
+                        const hasRental = hasRentalAtSlot(studio, slot);
+
+                        if (isTooSoon) {
+                            html += '<div class="time-cell" style="background: #f5f5f5; cursor: not-allowed;"><div style="padding: 5px; font-size: 11px; color: #999;">×</div></div>';
+                        } else if (hasRental) {
+                            html += '<div class="time-cell occupied"><div style="padding: 5px; font-size: 11px;">×</div></div>';
+                        } else if (studio === 'A' && personalCount < 5) {
+                            html += '<div class="time-cell" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')"><div style="padding: 5px; font-size: 11px; color: #4CAF50; font-weight: bold;">○</div></div>';
+                        } else if (studio === 'B') {
+                            html += '<div class="time-cell" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')"><div style="padding: 5px; font-size: 11px; color: #4CAF50; font-weight: bold;">○</div></div>';
+                        } else {
+                            html += '<div class="time-cell occupied"><div style="padding: 5px; font-size: 11px;">×</div></div>';
+                        }
+                        cellCount++;
+                    }
+                }
+
+                while (cellCount < 48) {
+                    html += '<div class="time-cell"></div>';
+                    cellCount++;
+                }
+            });
+            
+            html += '</div>';
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+        
+        // スマホ版：縦タイムライン表示（2列対応）
+        function renderMobileCalendar(studios) {
+            const containerClass = studios.length === 1 ? 'studios-container single' : 'studios-container';
+            let html = '<div class="' + containerClass + '">';
+            
+            studios.forEach(studio => {
+                html += '<div class="studio-section">';
+                html += '<div class="studio-section-header">' + studio + ' Studio</div>';
+                
+                for (let slot = 0; slot < 48; slot++) {
+                    const hour = Math.floor(slot / 2);
+                    const minute = (slot % 2) * 30;
+                    const timeStr = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+                    
+                    const booking = findBookingAtSlot(studio, slot);
+                    // ★時間制限を30分に統一（空き枠・既存個人利用枠とも現時刻+30分以降ならOK）
+                    const isTooSoon = isWithin30Minutes(slot);
+                    
+                    html += '<div class="time-slot-mobile">';
+                    html += '<div class="time-label-mobile">' + timeStr + '</div>';
+                    
+                    if (booking) {
+                        const isPersonal = isPersonalBooking(booking);
+
+                        if (isPersonal) {
+                            // ★修正: 個人利用予約は30分スロット単位で個別判定
+                            // isStartに関わらず、各スロットで参加可否を判定
+                            const personalCount = countPersonalAtSlot(studio, slot);
+                            const isJoinable = studio === 'A' && userType === 'member' && personalCount < 5 && !isTooSoon;
+
+                            if (isJoinable) {
+                                html += '<div class="time-content-mobile personal" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')">';
+                                html += '<div style="padding: 8px 5px; font-size: 16px; color: #4CAF50; font-weight: bold; text-align: center;">○</div>';
+                                html += '</div>';
+                            } else {
+                                html += '<div class="time-content-mobile occupied">';
+                                html += '<div style="padding: 8px 5px; font-size: 16px; color: #999; font-weight: bold; text-align: center;">×</div>';
+                                html += '</div>';
+                            }
+                        } else {
+                            // レンタル/ブロックイベントは全スロット占有として表示
+                            html += '<div class="time-content-mobile occupied">';
+                            html += '<div style="padding: 8px 5px; font-size: 16px; color: #999; font-weight: bold; text-align: center;">×</div>';
+                            html += '</div>';
+                        }
+                    } else {
+                        const personalCount = countPersonalAtSlot(studio, slot);
+                        const hasRental = hasRentalAtSlot(studio, slot);
+                        
+                        if (isTooSoon) {
+                            html += '<div class="time-content-mobile" style="background: #f5f5f5; cursor: not-allowed;"><div style="padding: 8px 5px; font-size: 16px; color: #999; text-align: center;">×</div></div>';
+                        } else if (hasRental) {
+                            html += '<div class="time-content-mobile occupied"><div style="padding: 8px 5px; font-size: 16px; color: #999; text-align: center;">×</div></div>';
+                        } else if (studio === 'A' && personalCount < 5) {
+                            html += '<div class="time-content-mobile" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')"><div style="padding: 8px 5px; font-size: 16px; color: #4CAF50; font-weight: bold; text-align: center;">○</div></div>';
+                        } else if (studio === 'B') {
+                            html += '<div class="time-content-mobile" onclick="openBookingModal(\'' + studio + '\', ' + slot + ')"><div style="padding: 8px 5px; font-size: 16px; color: #4CAF50; font-weight: bold; text-align: center;">○</div></div>';
+                        } else {
+                            html += '<div class="time-content-mobile occupied"><div style="padding: 8px 5px; font-size: 16px; color: #999; text-align: center;">×</div></div>';
+                        }
+                    }
+                    
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+        
+        // ★修正：個人利用判定はタイトルのみで行う
+        // IDS発行の予約タイトルは必ず「○○ 様 - 個人利用（シェア）」または「○○ 様 - レンタル（貸切）」の形式。
+        // Spacemarket等の外部予約は description に「[利用形態] 個人利用」という文字列が含まれることがあり、
+        // それを個人利用予約と誤判定すると貸切時間帯にシェア予約が取れてしまう（二重予約バグ）。
+        // → 判定は title のみに限定する。
+        function isPersonalBooking(booking) {
+            const title = booking.title || '';
+            return title.includes('個人利用') || title.includes('シェア');
+        }
+
+        // ★修正①：30分スロット単位で予約を検索
+        // 「個人利用・シェア」以外のイベント（正規練等の手動イベント含む）を優先返却
+        function findBookingAtSlot(studio, slot) {
+            let personalBooking = null;
+            for (let booking of bookings) {
+                if (booking.studio === studio && 
+                    slot >= booking.startSlot && 
+                    slot < booking.startSlot + booking.durationSlots) {
+                    if (!isPersonalBooking(booking)) {
+                        // ブロックイベント（正規練・レンタル等）を優先返却
+                        return { ...booking, isStart: slot === booking.startSlot };
+                    }
+                    if (!personalBooking) personalBooking = booking;
+                }
+            }
+            if (personalBooking) {
+                return { ...personalBooking, isStart: slot === personalBooking.startSlot };
+            }
+            return null;
+        }
+        
+        // 時間制限チェック（空き時間用: 30分）
+        function isWithin30Minutes(slot) {
+            const selectedDate = document.getElementById('selectedDate').value;
+            const now = new Date();
+            
+            const slotHour = Math.floor(slot / 2);
+            const slotMinute = (slot % 2) * 30;
+            const slotDateTime = new Date(selectedDate + 'T' + String(slotHour).padStart(2, '0') + ':' + String(slotMinute).padStart(2, '0') + ':00');
+            
+            const diffMs = slotDateTime - now;
+            const minutesDiff = diffMs / 60000;
+            
+            return minutesDiff < 30;
+        }
+        
+        // ※旧：予約済み時間用の90分チェック関数。現在はisWithin30Minutesに統一済みのため未使用。
+        //   後方互換のため残置しているが、新規コードからは呼び出さないこと。
+        function isWithin90Minutes(slot) {
+            return isWithin30Minutes(slot);
+        }
+
+
+        // 個人利用の予約数をカウント
+        // ★B2: title/descriptionがundefinedでも落ちないようガード
+        // ★B3: 他関数と整合させ「個人利用」「シェア」両方を個人利用としてカウント
+        function countPersonalAtSlot(studio, slot) {
+            let count = 0;
+            for (let booking of bookings) {
+                if (booking.studio === studio &&
+                    slot >= booking.startSlot &&
+                    slot < booking.startSlot + booking.durationSlots) {
+                    if (isPersonalBooking(booking)) {
+                        count++;
+                    }
+                }
+            }
+            return count;
+        }
+        
+        // ★修正②：レンタル予約があるかチェック
+        // 「個人利用・シェア」以外のイベントはすべてブロック扱い（正規練等の手動イベントも含む）
+        function hasRentalAtSlot(studio, slot) {
+            for (let booking of bookings) {
+                if (booking.studio === studio && 
+                    slot >= booking.startSlot && 
+                    slot < booking.startSlot + booking.durationSlots) {
+                    if (!isPersonalBooking(booking)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        // 個人利用の予約数をカウント（時間単位・旧版、未使用）
+        function countPersonalBookings(studio, hour) {
+            let count = 0;
+            for (let booking of bookings) {
+                if (booking.studio === studio && 
+                    hour >= booking.startHour && 
+                    hour < booking.startHour + booking.duration &&
+                    booking.title.includes('個人利用')) {
+                    count++;
+                }
+            }
+            return count;
+        }
+        
+        // レンタル予約があるかチェック（時間単位・旧版、未使用）
+        function hasRentalBooking(studio, hour) {
+            for (let booking of bookings) {
+                if (booking.studio === studio && 
+                    hour >= booking.startHour && 
+                    hour < booking.startHour + booking.duration &&
+                    booking.title.includes('レンタル')) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // 予約検索（時間単位・旧版、未使用）
+        function findBooking(studio, hour) {
+            const bookingsAtTime = [];
+            
+            for (let booking of bookings) {
+                if (booking.studio === studio && hour >= booking.startHour && hour < booking.startHour + booking.duration) {
+                    bookingsAtTime.push({
+                        ...booking,
+                        isStart: hour === booking.startHour
+                    });
+                }
+            }
+            
+            if (bookingsAtTime.length === 0) return null;
+            
+            const rental = bookingsAtTime.find(b => b.title.includes('レンタル'));
+            if (rental) return rental;
+            
+            return bookingsAtTime[0];
+        }
+        
+        // 予約モーダルを開く
+        function openBookingModal(studio, slot) {
+            if (isWithin30Minutes(slot)) {
+                alert('申し訳ございません、その時間は予約ができません。');
+                return;
+            }
+            
+            const hour = Math.floor(slot / 2);
+            const minute = (slot % 2) * 30;
+            const timeStr = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+            
+            selectedBooking = {
+                studio: studio,
+                slot: slot,
+                hour: hour,
+                minute: minute,
+                time: timeStr,
+                date: document.getElementById('selectedDate').value
+            };
+            
+            document.getElementById('modalStudio').textContent = studio + ' Studio';
+            document.getElementById('modalDateTime').textContent = 
+                selectedBooking.date + ' ' + timeStr + '〜';
+            
+            const usageTypeSelect = document.getElementById('usageType');
+            const personalOption = document.getElementById('personalOption');
+            
+            if (studio === 'B' || userType === 'general') {
+                personalOption.style.display = 'none';
+                usageTypeSelect.value = 'rental';
+            } else {
+                personalOption.style.display = 'block';
+            }
+            
+            calculatePrice();
+            document.getElementById('bookingModal').classList.add('active');
+        }
+        
+        // モーダルを閉じる
+        function closeModal() {
+            document.getElementById('bookingModal').classList.remove('active');
+        }
+        
+        // ★B5: 30分単位で時間帯別の時間数を計算
+        // 深夜（0:00-5:59）と通常（6:00-23:59）の各バンドに含まれる時間数を返す
+        function calcBandedHours(startHour, startMinute, duration) {
+            const totalHalfHours = duration * 2;
+            let nightHalves = 0;
+            let dayHalves = 0;
+            let currentMinutes = startHour * 60 + startMinute;
+
+            for (let i = 0; i < totalHalfHours; i++) {
+                const hourOfDay = Math.floor(currentMinutes / 60) % 24;
+                if (hourOfDay >= 0 && hourOfDay < 6) {
+                    nightHalves++;
+                } else {
+                    dayHalves++;
+                }
+                currentMinutes += 30;
+            }
+
+            return { nightHours: nightHalves / 2, dayHours: dayHalves / 2 };
+        }
+
+        // 料金計算
+        function calculatePrice() {
+            const studio = selectedBooking.studio;
+            const usageType = document.getElementById('usageType').value;
+            const duration = parseInt(document.getElementById('duration').value);
+            const isMember = userType === 'member';
+            const startHour = selectedBooking.hour;
+            const startMinute = selectedBooking.minute || 0;
+
+            let price = 0;
+
+            if (usageType === 'personal' && (studio === 'B' || !isMember)) {
+                document.getElementById('usageType').value = 'rental';
+                alert('個人利用はA Studioのメンバー専用です');
+                calculatePrice();
+                return;
+            }
+
+            if (usageType === 'personal' && studio === 'A') {
+                // 個人利用は時間帯按分なし（全時間 500円/2h + 250円/h）
+                price = 500;
+                if (duration > 2) price += (duration - 2) * 250;
+            } else {
+                // ★B5: 時間帯按分（案A：純粋按分）
+                //   深夜と通常の両方を含む跨ぎ予約は、それぞれの時間単価で計算
+                //   通常時間のみの場合は base 2h縛りを維持
+                const bands = calcBandedHours(startHour, startMinute, duration);
+                const nightHours = bands.nightHours;
+                const dayHours = bands.dayHours;
+
+                // 各バンドの料金単価
+                const nightRate = studio === 'A'
+                    ? (isMember ? 500 : 850)
+                    : (isMember ? 700 : 1000);
+                const dayBase = studio === 'A'
+                    ? (isMember ? 2000 : 3000)
+                    : (isMember ? 3000 : 4000);
+                const dayHourly = studio === 'A'
+                    ? (isMember ? 1000 : 1500)
+                    : (isMember ? 1500 : 2000);
+
+                const nightPrice = nightHours * nightRate;
+                let dayPrice = 0;
+
+                if (dayHours > 0) {
+                    if (nightHours === 0) {
+                        // 通常時間のみ：base 2h縛りを適用
+                        dayPrice = dayHours <= 2 ? dayBase : dayBase + (dayHours - 2) * dayHourly;
+                    } else {
+                        // 跨ぎ予約：通常時間部分も時間単価で按分（base縛りなし）
+                        dayPrice = dayHours * dayHourly;
+                    }
+                }
+
+                price = nightPrice + dayPrice;
+            }
+
+            document.getElementById('priceDisplay').textContent = '¥' + price.toLocaleString();
+        }
+        
+        // 予約送信
+        function submitBooking() {
+            const name = document.getElementById('customerName').value;
+            const email = document.getElementById('customerEmail').value;
+            const phone = document.getElementById('customerPhone').value;
+            
+            if (!name || !email || !phone) {
+                alert('全ての項目を入力してください');
+                return;
+            }
+            
+            const data = {
+                name: name,
+                email: email,
+                phone: phone,
+                studio: selectedBooking.studio + ' Studio',
+                usageType: document.getElementById('usageType').value === 'rental' ? 'レンタル（貸切）' : '個人利用（シェア）',
+                userType: userType === 'member' ? 'メンバー' : '一般',
+                date: selectedBooking.date,
+                time: selectedBooking.time,
+                duration: document.getElementById('duration').value,
+                price: document.getElementById('priceDisplay').textContent
+            };
+
+            // ★B7: メンバーの場合はトークンを添付（GAS側で偽装ブロック）
+            if (userType === 'member' && memberToken) {
+                data.memberToken = memberToken;
+            }
+
+            const formData = new URLSearchParams();
+            for (const key in data) {
+                formData.append(key, data[key]);
+            }
+            
+            const buttons = document.querySelectorAll('.btn-primary');
+            buttons.forEach(btn => {
+                btn.disabled = true;
+                if (btn.textContent.includes('予約確定')) {
+                    btn.textContent = '送信中...';
+                }
+            });
+            
+            fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: formData.toString()
+            })
+            .then(response => response.text())
+            .then(result => {
+                console.log('予約結果:', result);
+                
+                if (result === 'DOUBLE_BOOKING') {
+                    alert('申し訳ございません。\n選択された時間帯は既に予約が入っています。\n別の時間帯をお選びください。');
+                } else if (result === 'INVALID_TOKEN') {
+                    // ★B7: トークン期限切れ → 再ログイン誘導
+                    alert('メンバーセッションの有効期限が切れました。\n再度ログインしてください。');
+                    _clearMemberSession();
+                    renderCalendar();
+                } else if (result === 'SUCCESS') {
+                    closeModal();
+                    alert('予約を受け付けました！\n確認メールをお送りします。');
+                    setTimeout(() => {
+                        loadBookings();
+                    }, 1000);
+                } else {
+                    alert('予約処理中にエラーが発生しました。\n結果: ' + result);
+                }
+            })
+            .catch(error => {
+                console.error('送信エラー:', error);
+                alert('予約送信に失敗しました。\nもう一度お試しください。');
+            })
+            .finally(() => {
+                buttons.forEach(btn => {
+                    btn.disabled = false;
+                    if (btn.textContent.includes('送信中')) {
+                        btn.textContent = '予約確定';
+                    }
+                });
+            });
+        }
+        
+        // ログイン
+        function showLogin() {
+            document.getElementById('loginModal').classList.add('active');
+        }
+        
+        function closeLogin() {
+            document.getElementById('loginModal').classList.remove('active');
+        }
+        
+        // ★B7: メンバーセッション状態をクリア（ログアウト処理の共通化）
+        function _clearMemberSession() {
+            memberToken = null;
+            userType = 'general';
+            localStorage.removeItem(MEMBER_TOKEN_KEY);
+            document.getElementById('loginBtn').textContent = '🔒 メンバーログイン';
+            document.getElementById('loginBtn').onclick = showLogin;
+        }
+
+        // ★B7: GAS側でパスワード認証 → トークン取得 → localStorageに保存
+        function login() {
+            const password = document.getElementById('loginPassword').value;
+            if (!password) {
+                alert('パスワードを入力してください');
+                return;
+            }
+
+            const loginButtons = document.querySelectorAll('#loginModal .btn-primary');
+            loginButtons.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = '確認中...';
+            });
+
+            const formData = new URLSearchParams();
+            formData.append('action', 'login');
+            formData.append('password', password);
+
+            fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData.toString()
+            })
+            .then(res => res.json())
+            .then(result => {
+                if (result.success && result.token) {
+                    memberToken = result.token;
+                    localStorage.setItem(MEMBER_TOKEN_KEY, memberToken);
+                    userType = 'member';
+                    document.getElementById('loginBtn').textContent = '🔓 ログアウト';
+                    document.getElementById('loginBtn').onclick = logout;
+                    document.getElementById('loginPassword').value = '';
+                    closeLogin();
+                    alert('メンバーログインしました！\nお得な料金でご利用いただけます。');
+                    renderCalendar();
+                } else {
+                    alert(result.message || 'パスワードが正しくありません');
+                }
+            })
+            .catch(err => {
+                console.error('ログインエラー:', err);
+                alert('ログインに失敗しました。\nネットワークをご確認の上、再度お試しください。');
+            })
+            .finally(() => {
+                loginButtons.forEach(btn => {
+                    btn.disabled = false;
+                    btn.textContent = 'ログイン';
+                });
+            });
+        }
+
+        function logout() {
+            if (confirm('ログアウトしますか？')) {
+                _clearMemberSession();
+                alert('ログアウトしました');
+                renderCalendar();
+            }
+        }
+        
+        // ウィンドウリサイズ時にカレンダーを再描画
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                renderCalendar();
+            }, 250);
+        });
+    </script>
+</body>
+</html>
