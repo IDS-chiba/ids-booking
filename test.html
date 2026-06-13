@@ -1179,11 +1179,11 @@
             document.getElementById('priceDisplay').textContent = '¥' + price.toLocaleString();
         }
         
-        // 予約送信
-        // ★ v2追加: 決済画面へ進むフロー（PaymentForリンク方式対応）
-        // GASに action=create_pending でPOST → GASが自動POSTフォームHTMLを返却
-        // → ブラウザがPaymentFor決済画面に遷移
-        function proceedToPayment() {
+        // ★ v3更新: 決済画面へ進むフロー（fetch + JSON応答方式）
+        // GASに action=create_pending でPOST → JSONで {sid, paymentForUrl, formParams} 受信
+        // → user gesture内で PaymentForへ直接form.submit() → iframe sandbox回避
+        // → 「こちらをクリック」不要、ワンクリックで決済画面に遷移
+        async function proceedToPayment() {
             const name = document.getElementById('customerName').value.trim();
             const email = document.getElementById('customerEmail').value.trim();
             const phone = document.getElementById('customerPhone').value.trim();
@@ -1223,31 +1223,68 @@
                 'よろしければ「OK」を押してください。PaymentFor決済画面に遷移します。';
             if (!confirm(confirmMsg)) return;
 
-            // フォーム動的生成 → GASへPOST submit（応答HTMLがブラウザで実行される）
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = API_URL;
-            form.target = '_self';
-            form.style.display = 'none';
-
-            for (const key in data) {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = key;
-                input.value = data[key];
-                form.appendChild(input);
-            }
-            document.body.appendChild(form);
-
-            // 進行中の表示
+            // 進行中表示
             const buttons = document.querySelectorAll('.btn-primary');
             buttons.forEach(btn => {
                 btn.disabled = true;
-                if (btn.textContent.includes('決済')) btn.textContent = '遷移中...';
+                if (btn.textContent.includes('決済')) btn.textContent = '仮押さえ中...';
             });
 
-            // 送信
-            form.submit();
+            try {
+                // 1) GAS に仮押さえ作成リクエスト（JSON応答）
+                const formData = new URLSearchParams();
+                for (const key in data) formData.append(key, data[key]);
+
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData.toString()
+                });
+                const result = await res.json();
+
+                if (result.status === 'DOUBLE_BOOKING') {
+                    alert('申し訳ございません。\n選択された時間帯は既に予約が入っています。');
+                    closeModal();
+                    loadBookings();
+                    return;
+                }
+                if (result.status !== 'PENDING_PAYMENT' || !result.paymentForUrl || !result.formParams) {
+                    alert('予期しない応答: ' + JSON.stringify(result).slice(0, 200));
+                    return;
+                }
+
+                // 2) PaymentForへ直接form submit（user gesture内なのでブロックされない）
+                buttons.forEach(btn => {
+                    if (btn.textContent.includes('仮押さえ')) btn.textContent = '決済画面へ遷移中...';
+                });
+
+                const pfForm = document.createElement('form');
+                pfForm.method = 'POST';
+                pfForm.action = result.paymentForUrl;
+                pfForm.acceptCharset = 'Shift_JIS';
+                pfForm.style.display = 'none';
+                for (const key in result.formParams) {
+                    const v = result.formParams[key];
+                    if (v === undefined || v === null || v === '') continue;
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = String(v);
+                    pfForm.appendChild(input);
+                }
+                document.body.appendChild(pfForm);
+                pfForm.submit();
+
+            } catch (err) {
+                console.error('決済遷移エラー:', err);
+                alert('決済画面への遷移に失敗しました。\n' + (err.message || err));
+                buttons.forEach(btn => {
+                    btn.disabled = false;
+                    if (btn.textContent.includes('遷移中') || btn.textContent.includes('仮押さえ')) {
+                        btn.textContent = '決済へ進む →';
+                    }
+                });
+            }
         }
 
         // 旧フロー（試験的に残してある。本実装では非推奨）
