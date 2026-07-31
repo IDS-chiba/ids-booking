@@ -597,6 +597,14 @@
                 </select>
             </div>
 
+            <div class="form-group">
+                <label>お支払い方法</label>
+                <select id="paymentMethod">
+                    <option value="credit">クレジットカード</option>
+                    <option value="paypay">PayPay</option>
+                </select>
+            </div>
+
             <div class="price-display" id="priceDisplay">¥0</div>
 
             <div class="button-group">
@@ -622,7 +630,7 @@
     </div>
 
     <script>
-        const API_URL = 'https://script.google.com/macros/s/AKfycbzBznDLEP8s22f2ZcNHrjnvVtZxLu-FEkJtvnSxwK0qq70DtQRJLUdVUxARlfOca7fe/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbxGqiE8TQ2lxd1Uj54aLhd9v90APlJoITPOXmUrNJ0o6J3I8Iq8rSKETBddWLrOB2PyoQ/exec';
         // ★B7: パスワードはGAS側に移動。フロントには平文を残さない。
         const MEMBER_TOKEN_KEY = 'idsMemberToken';
         // ★表示日数：PC=7日、スマホ=3日
@@ -1078,7 +1086,7 @@
             document.getElementById('priceDisplay').textContent = '¥' + price.toLocaleString();
         }
 
-        // 予約送信
+        // 予約送信（新フロー：仮押さえ → 決済ページへ遷移）
         function submitBooking() {
             const name = document.getElementById('customerName').value;
             const email = document.getElementById('customerEmail').value;
@@ -1090,6 +1098,7 @@
             }
 
             const data = {
+                action: 'create_pending',
                 name: name,
                 email: email,
                 phone: phone,
@@ -1099,10 +1108,11 @@
                 date: selectedBooking.date,
                 time: selectedBooking.time,
                 duration: document.getElementById('duration').value,
-                price: document.getElementById('priceDisplay').textContent
+                price: document.getElementById('priceDisplay').textContent,
+                paymentMethod: document.getElementById('paymentMethod').value
             };
 
-            // ★B7: メンバーの場合はトークンを添付（GAS側で偽装ブロック）
+            // メンバーの場合はトークンを添付（GAS側で偽装ブロック）
             if (userType === 'member' && memberToken) {
                 data.memberToken = memberToken;
             }
@@ -1116,50 +1126,69 @@
             buttons.forEach(btn => {
                 btn.disabled = true;
                 if (btn.textContent.includes('予約確定')) {
-                    btn.textContent = '送信中...';
+                    btn.textContent = '決済ページへ移動中...';
                 }
             });
 
+            const restoreButtons = function () {
+                buttons.forEach(btn => {
+                    btn.disabled = false;
+                    if (btn.textContent.includes('決済ページへ')) {
+                        btn.textContent = '予約確定';
+                    }
+                });
+            };
+
             fetch(API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: formData.toString()
             })
-            .then(response => response.text())
+            .then(response => response.json())
             .then(result => {
-                console.log('予約結果:', result);
+                console.log('create_pending 結果:', result);
 
-                if (result === 'DOUBLE_BOOKING') {
+                if (result.status === 'PENDING_PAYMENT') {
+                    // 仮押さえ成功 → 決済ページへ自動遷移
+                    redirectToPayment(result.paymentForUrl, result.formParams);
+                    return;
+                }
+
+                if (result.status === 'DOUBLE_BOOKING') {
                     alert('申し訳ございません。\n選択された時間帯は既に予約が入っています。\n別の時間帯をお選びください。');
-                } else if (result === 'INVALID_TOKEN') {
-                    // ★B7: トークン期限切れ → 再ログイン誘導
+                } else if (result.status === 'INVALID_TOKEN') {
                     alert('メンバーセッションの有効期限が切れました。\n再度ログインしてください。');
                     _clearMemberSession();
                     renderCalendar();
-                } else if (result === 'SUCCESS') {
-                    closeModal();
-                    alert('予約を受け付けました！\n確認メールをお送りします。');
-                    setTimeout(() => {
-                        loadBookings();
-                    }, 1000);
                 } else {
-                    alert('予約処理中にエラーが発生しました。\n結果: ' + result);
+                    alert('予約処理中にエラーが発生しました。\n' + (result.message || JSON.stringify(result)));
                 }
+                restoreButtons();
             })
             .catch(error => {
                 console.error('送信エラー:', error);
                 alert('予約送信に失敗しました。\nもう一度お試しください。');
-            })
-            .finally(() => {
-                buttons.forEach(btn => {
-                    btn.disabled = false;
-                    if (btn.textContent.includes('送信中')) {
-                        btn.textContent = '予約確定';
-                    }
-                });
+                restoreButtons();
             });
+        }
+
+        // PaymentFor（リンク方式）へフォームを自動POSTして決済ページへ遷移
+        function redirectToPayment(actionUrl, params) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = actionUrl;
+            form.style.display = 'none';
+
+            for (const key in params) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = key;
+                input.value = params[key];
+                form.appendChild(input);
+            }
+
+            document.body.appendChild(form);
+            form.submit();
         }
 
         // ログイン
