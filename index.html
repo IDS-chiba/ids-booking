@@ -631,6 +631,67 @@
 
     <script>
         const API_URL = 'https://script.google.com/macros/s/AKfycbxGqiE8TQ2lxd1Uj54aLhd9v90APlJoITPOXmUrNJ0o6J3I8Iq8rSKETBddWLrOB2PyoQ/exec';
+
+        // ★2026-08-26 追加: 個別の list 取得を list_range 1本にまとめるシム
+        //   従来は1画面につき16本のリクエストが飛び、1本でも失敗すると
+        //   Promise.all が全滅して「エラーが発生しました」になっていた。
+        //   既存の loadBookings 等のロジックには手を入れず、fetch層で集約する。
+        (function () {
+            const _origFetch = window.fetch.bind(window);
+            let batch = null;
+            function scheduleBatch() {
+                if (batch) return batch;
+                const b = { dates: [], studios: {}, promise: null };
+                b.promise = new Promise(function (resolve) {
+                    setTimeout(function () {
+                        batch = null;
+                        const ds = b.dates.slice().sort();
+                        const from = ds[0], to = ds[ds.length - 1];
+                        const keys = Object.keys(b.studios);
+                        const studio = (keys.length === 1) ? keys[0] : 'all';
+                        const url = API_URL + '?action=list_range&date_from=' + from + '&date_to=' + to + '&studio=' + studio;
+                        const attempt = function (retryLeft) {
+                            return _origFetch(url)
+                                .then(function (res) { return res.json(); })
+                                .then(function (data) {
+                                    if (data && data.days) return resolve(data.days);
+                                    throw new Error('bad payload');
+                                })
+                                .catch(function (err) {
+                                    if (retryLeft > 0) return attempt(retryLeft - 1);
+                                    console.warn('list_range 取得失敗。個別取得にフォールバックします', err);
+                                    resolve(null);
+                                });
+                        };
+                        attempt(1);
+                    }, 0);
+                });
+                batch = b;
+                return b;
+            }
+            window.fetch = function (input, init) {
+                const url = (typeof input === 'string') ? input : ((input && input.url) || '');
+                const mm = (typeof url === 'string')
+                    ? url.match(/[?&]action=list&date=(\d{4}-\d{2}-\d{2})&studio=([^&]+)/)
+                    : null;
+                if (!mm) return _origFetch(input, init);
+                const date = mm[1];
+                const b = scheduleBatch();
+                b.dates.push(date);
+                b.studios[mm[2]] = true;
+                return b.promise.then(function (days) {
+                    // 範囲取得に失敗した場合のみ、従来どおり個別に取得する
+                    if (!days) return _origFetch(input, init);
+                    const arr = days[date] || [];
+                    return {
+                        ok: true,
+                        status: 200,
+                        json: function () { return Promise.resolve({ success: true, bookings: arr }); }
+                    };
+                });
+            };
+        })();
+
         // ★B7: パスワードはGAS側に移動。フロントには平文を残さない。
         const MEMBER_TOKEN_KEY = 'idsMemberToken';
         // ★表示日数：PC=7日、スマホ=3日
