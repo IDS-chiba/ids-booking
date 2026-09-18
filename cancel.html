@@ -69,7 +69,8 @@
       btn.textContent = "決済ページへ移動中...";
       var body = new URLSearchParams();
       body.append("action", "retry_payment");
-      body.append("sid", saved.sid);
+      // ★パラメータ名 sid は Google のフロントエンドが値によって400を返すため使わない
+      body.append("pendingSid", saved.sid);
       body.append("paymentMethod", saved.paymentMethod || "credit");
       if (saved.memberToken) body.append("memberToken", saved.memberToken);
 
