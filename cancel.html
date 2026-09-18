@@ -22,6 +22,82 @@
   <div class="x">!</div>
   <h1>決済をキャンセルしました</h1>
   <p>仮押さえを解除しました。<br>もう一度予約をご希望の場合は、<br>下のボタンから予約カレンダーへお戻りください。</p>
+  <div class="actions" id="retryBox" style="display:none;margin-bottom:12px">
+    <button class="btn" id="retryBtn" type="button">もう一度お支払いする</button>
+  </div>
+  <p class="footnote" id="retryInfo" style="display:none"></p>
+  <script>
+  (function () {
+    var API_URL = 'https://script.google.com/macros/s/AKfycbxGqiE8TQ2lxd1Uj54aLhd9v90APlJoITPOXmUrNJ0o6J3I8Iq8rSKETBddWLrOB2PyoQ/exec';
+    var box = document.getElementById("retryBox");
+    var btn = document.getElementById("retryBtn");
+    var info = document.getElementById("retryInfo");
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem("ids_retry") || "null"); } catch (e) {}
+
+    // 仮押さえは20分で失効する。過ぎていれば再決済は案内しない
+    if (!saved || !saved.sid || (Date.now() - (saved.savedAt || 0)) > 20 * 60 * 1000) return;
+
+    // 再決済できる状態なので、本文の「解除しました」という案内を差し替える
+    var lead = document.querySelector(".card p");
+    if (lead) lead.innerHTML = "お支払いが完了していません。<br>予約枠は20分間お取りしています。<br>下のボタンからお支払いにお進みいただけます。";
+
+    box.style.display = "";
+    info.style.display = "";
+    info.textContent = [saved.studio, saved.date, saved.time, saved.price].filter(Boolean).join(" / ");
+
+    function post(actionUrl, params) {
+      var f = document.createElement("form");
+      f.method = "POST"; f.action = actionUrl; f.style.display = "none";
+      for (var k in params) {
+        var i = document.createElement("input");
+        i.type = "hidden"; i.name = k; i.value = params[k];
+        f.appendChild(i);
+      }
+      document.body.appendChild(f); f.submit();
+    }
+
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      btn.textContent = "決済ページへ移動中...";
+      var body = new URLSearchParams();
+      body.append("action", "retry_payment");
+      body.append("sid", saved.sid);
+      body.append("paymentMethod", saved.paymentMethod || "credit");
+      if (saved.memberToken) body.append("memberToken", saved.memberToken);
+
+      fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString()
+      })
+      .then(function (res) { return res.json(); })
+      .then(function (result) {
+        if (result.status === "PENDING_PAYMENT") {
+          try { localStorage.removeItem("ids_retry"); } catch (e) {}
+          post(result.paymentForUrl, result.formParams);
+          return;
+        }
+        var msg = "もう一度お支払いできませんでした。予約カレンダーからやり直してください。";
+        if (result.status === "ALREADY_PAID")        msg = "この予約はお支払い済みです。確認メールをご確認ください。";
+        else if (result.status === "EXPIRED")        msg = "仮押さえの有効期限が切れました。お手数ですが予約カレンダーからやり直してください。";
+        else if (result.status === "NOT_FOUND")      msg = "予約情報が見つかりませんでした。予約カレンダーからやり直してください。";
+        else if (result.status === "DOUBLE_BOOKING") msg = "この時間帯は他の方の予約が入りました。別の時間をお選びください。";
+        else if (result.status === "INVALID_TOKEN")  msg = "メンバーセッションの期限が切れました。予約カレンダーから再度ログインしてください。";
+        alert(msg);
+        try { localStorage.removeItem("ids_retry"); } catch (e) {}
+        box.style.display = "none";
+        info.style.display = "none";
+      })
+      .catch(function (err) {
+        console.error(err);
+        alert("通信に失敗しました。もう一度お試しください。");
+        btn.disabled = false;
+        btn.textContent = "もう一度お支払いする";
+      });
+    });
+  })();
+  </script>
   <div class="actions">
     <a class="btn" href="https://ids-chiba.github.io/ids-booking/">予約カレンダーに戻る</a>
   </div>
