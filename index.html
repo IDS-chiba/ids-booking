@@ -1025,6 +1025,14 @@
 
         // 予約モーダルを開く（日付指定）
         function openBookingModal(studio, date, slot) {
+            // ★2026-09-18追加: GASを温めておく（初回アクセスが遅いため）
+            try {
+                if (!window.__idsWarmedAt || Date.now() - window.__idsWarmedAt > 120000) {
+                    window.__idsWarmedAt = Date.now();
+                    fetch(API_URL + '?action=warmup', { cache: 'no-store' }).catch(function () {});
+                }
+            } catch (e) {}
+
             if (isWithin30Minutes(date, slot)) {
                 alert('申し訳ございません、その時間は予約ができません。');
                 return;
@@ -1183,6 +1191,7 @@
                 formData.append(key, data[key]);
             }
 
+            idsShowOverlay(true);
             const buttons = document.querySelectorAll('.btn-primary');
             buttons.forEach(btn => {
                 btn.disabled = true;
@@ -1192,6 +1201,7 @@
             });
 
             const restoreButtons = function () {
+                idsShowOverlay(false);
                 buttons.forEach(btn => {
                     btn.disabled = false;
                     if (btn.textContent.includes('決済ページへ')) {
@@ -1227,10 +1237,32 @@
                 restoreButtons();
             })
             .catch(error => {
+                idsShowOverlay(false);
                 console.error('送信エラー:', error);
                 alert('予約送信に失敗しました。\nもう一度お試しください。');
                 restoreButtons();
             });
+        }
+
+        // ★2026-09-18追加: 決済ページ準備中の待ち画面を出し入れする
+        let _idsOverlayTimer = null;
+        function idsShowOverlay(show) {
+            const el = document.getElementById("idsOverlay");
+            const note = document.getElementById("idsOverlayNote");
+            if (!el) return;
+            if (_idsOverlayTimer) { clearInterval(_idsOverlayTimer); _idsOverlayTimer = null; }
+            if (show) {
+                el.style.display = "flex";
+                const started = Date.now();
+                if (note) note.textContent = "";
+                _idsOverlayTimer = setInterval(function () {
+                    const sec = Math.floor((Date.now() - started) / 1000);
+                    if (note && sec >= 8) note.textContent = "混み合っています。もう少しお待ちください（" + sec + "秒）";
+                }, 1000);
+            } else {
+                el.style.display = "none";
+                if (note) note.textContent = "";
+            }
         }
 
         // PaymentFor（リンク方式）へフォームを自動POSTして決済ページへ遷移
@@ -1359,5 +1391,15 @@
             }, 250);
         });
     </script>
+    <!-- ★2026-09-18追加: 決済ページ準備中の待ち画面 -->
+    <div id="idsOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.94);z-index:9999;align-items:center;justify-content:center;text-align:center;padding:24px">
+        <div>
+            <div style="width:52px;height:52px;margin:0 auto 20px;border:4px solid #e3e6f5;border-top-color:#667eea;border-radius:50%;animation:idsSpin 0.9s linear infinite"></div>
+            <div style="font-size:1.05rem;font-weight:bold;color:#333;margin-bottom:10px">決済ページをご用意しています</div>
+            <div style="font-size:0.92rem;color:#666;line-height:1.7">10秒ほどかかる場合があります。<br>このまましばらくお待ちください。</div>
+            <div id="idsOverlayNote" style="font-size:0.85rem;color:#999;margin-top:16px"></div>
+        </div>
+    </div>
+    <style>@keyframes idsSpin{to{transform:rotate(360deg)}}</style>
 </body>
 </html>
