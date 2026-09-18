@@ -35,6 +35,18 @@
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem("ids_retry") || "null"); } catch (e) {}
 
+    // ★未決済メールのリンクから来た場合は URL の pendingSid を優先する
+    // （別端末・別ブラウザで開くと localStorage に情報がないため）
+    var urlSid = "";
+    try { urlSid = new URLSearchParams(location.search).get("pendingSid") || ""; } catch (e) {}
+    if (urlSid) {
+      if (!saved || saved.sid !== urlSid) {
+        saved = { sid: urlSid, paymentMethod: "credit", memberToken: "", savedAt: Date.now() };
+      } else {
+        saved.savedAt = Date.now();
+      }
+    }
+
     // 仮押さえは20分で失効する。過ぎていれば再決済は案内しない
     if (!saved || !saved.sid || (Date.now() - (saved.savedAt || 0)) > 20 * 60 * 1000) return;
 
