@@ -1235,6 +1235,22 @@
 
         // PaymentFor（リンク方式）へフォームを自動POSTして決済ページへ遷移
         function redirectToPayment(actionUrl, params) {
+            // ★2026-09-17追加: 決済失敗時に再決済できるよう、SIDと予約内容を控えておく
+            try {
+                localStorage.setItem('ids_retry', JSON.stringify({
+                    sid: params.SID,
+                    paymentMethod: (document.getElementById('paymentMethod') || {}).value || 'credit',
+                    memberToken: localStorage.getItem('idsMemberToken') || '',
+                    studio: selectedBooking.studio + ' Studio',
+                    date: selectedBooking.date,
+                    time: selectedBooking.time,
+                    price: (document.getElementById('priceDisplay') || {}).textContent || '',
+                    savedAt: Date.now()
+                }));
+            } catch (e) {
+                console.warn('再決済用の情報を保存できませんでした', e);
+            }
+
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = actionUrl;
