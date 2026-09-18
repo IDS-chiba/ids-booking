@@ -43,8 +43,11 @@
     var h1 = document.querySelector("h1");
     if (h1) h1.textContent = "お支払いが完了していません";
     if (lead) lead.innerHTML = "予約枠は20分間お取りしています。<br>下のボタンからお支払いにお進みいただけます。";
-    var back = document.querySelector(".actions a.btn");
-    if (back) { back.style.background = "#fff"; back.style.color = "#667eea"; back.style.border = "1px solid #667eea"; }
+    // このスクリプトは戻るボタンより前にあるため、読み込み完了後に処理する
+    document.addEventListener("DOMContentLoaded", function () {
+      var back = document.querySelector(".actions a.btn");
+      if (back) { back.style.background = "#fff"; back.style.color = "#667eea"; back.style.border = "1px solid #667eea"; }
+    });
 
     box.style.display = "";
     info.style.display = "";
