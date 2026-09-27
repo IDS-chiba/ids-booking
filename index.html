@@ -1166,6 +1166,14 @@
                 return;
             }
 
+            // ★2026-09-27追加: 「@」の無いアドレスがRemoteLOCKで弾かれ、
+            //   決済だけ成立してPINが発行されない事故があったため
+            const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+            if (!EMAIL_RE.test(email.trim())) {
+                alert('メールアドレスの形式をご確認ください。\nカギの情報をお送りするため、正しいアドレスが必要です。');
+                return;
+            }
+
             const data = {
                 action: 'create_pending',
                 name: name,
