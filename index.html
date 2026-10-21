@@ -582,7 +582,9 @@
                 <select id="usageType" onchange="calculatePrice()">
                     <option value="rental">レンタル（貸切）</option>
                     <option value="personal" id="personalOption">個人利用（シェア）- メンバー専用</option>
+                    <option value="full" id="fullOption">全面貸切（A + B Studio）</option>
                 </select>
+                <div id="fullNote" style="display:none; font-size:0.85rem; color:#667eea; margin-top:6px; line-height:1.6;">A Studio・B Studio の両方を貸切にします。両方が空いている時間のみご予約いただけます。<br>可動壁の開け方は <a href="https://youtube.com/shorts/mCC8zxonqW4" target="_blank" rel="noopener" style="color:#667eea;">こちらの動画</a> をご覧ください。</div>
             </div>
 
             <div class="form-group">
@@ -1106,6 +1108,12 @@
 
             let price = 0;
 
+            // ★2026-10-21 全面貸切（A + B Studio）
+            const isFull = usageType === 'full';
+            document.getElementById('modalStudio').textContent = isFull ? 'A Studio + B Studio（全面貸切）' : studio + ' Studio';
+            const fullNote = document.getElementById('fullNote');
+            if (fullNote) fullNote.style.display = isFull ? 'block' : 'none';
+
             if (usageType === 'personal' && (studio === 'B' || !isMember)) {
                 document.getElementById('usageType').value = 'rental';
                 alert('個人利用はA Studioのメンバー専用です');
@@ -1126,13 +1134,13 @@
                 const dayHours = bands.dayHours;
 
                 // 各バンドの料金単価
-                const nightRate = studio === 'A'
+                const nightRate = isFull ? (isMember ? 1200 : 1850) : studio === 'A'
                     ? (isMember ? 500 : 850)
                     : (isMember ? 700 : 1000);
-                const dayBase = studio === 'A'
+                const dayBase = isFull ? (isMember ? 4000 : 7000) : studio === 'A'
                     ? (isMember ? 2000 : 3000)
                     : (isMember ? 3000 : 4000);
-                const dayHourly = studio === 'A'
+                const dayHourly = isFull ? (isMember ? 2000 : 3500) : studio === 'A'
                     ? (isMember ? 1000 : 1500)
                     : (isMember ? 1500 : 2000);
 
@@ -1179,8 +1187,8 @@
                 name: name,
                 email: email,
                 phone: phone,
-                studio: selectedBooking.studio + ' Studio',
-                usageType: document.getElementById('usageType').value === 'rental' ? 'レンタル（貸切）' : '個人利用（シェア）',
+                studio: document.getElementById('usageType').value === 'full' ? 'A+B Studio' : selectedBooking.studio + ' Studio',
+                usageType: ({ rental: 'レンタル（貸切）', personal: '個人利用（シェア）', full: '全面貸切（A+B）' })[document.getElementById('usageType').value] || 'レンタル（貸切）',
                 userType: userType === 'member' ? 'メンバー' : '一般',
                 date: selectedBooking.date,
                 time: selectedBooking.time,
@@ -1234,7 +1242,9 @@
                 }
 
                 if (result.status === 'DOUBLE_BOOKING') {
-                    alert('申し訳ございません。\n選択された時間帯は既に予約が入っています。\n別の時間帯をお選びください。');
+                    alert(document.getElementById('usageType').value === 'full'
+                        ? '申し訳ございません。\nA Studio・B Studio のどちらかに、すでに予約が入っています。\n全面貸切は両方が空いている時間のみご予約いただけます。'
+                        : '申し訳ございません。\n選択された時間帯は既に予約が入っています。\n別の時間帯をお選びください。');
                 } else if (result.status === 'INVALID_TOKEN') {
                     alert('メンバーセッションの有効期限が切れました。\n再度ログインしてください。');
                     _clearMemberSession();
@@ -1281,7 +1291,7 @@
                     sid: params.SID,
                     paymentMethod: (document.getElementById('paymentMethod') || {}).value || 'credit',
                     memberToken: localStorage.getItem('idsMemberToken') || '',
-                    studio: selectedBooking.studio + ' Studio',
+                    studio: document.getElementById('usageType').value === 'full' ? 'A+B Studio' : selectedBooking.studio + ' Studio',
                     date: selectedBooking.date,
                     time: selectedBooking.time,
                     price: (document.getElementById('priceDisplay') || {}).textContent || '',
