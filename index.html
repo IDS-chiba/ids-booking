@@ -1067,6 +1067,7 @@
                 personalOption.style.display = 'block';
             }
 
+            buildDurationOptions();
             calculatePrice();
             document.getElementById('bookingModal').classList.add('active');
         }
@@ -1097,11 +1098,27 @@
             return { nightHours: nightHalves / 2, dayHours: dayHalves / 2 };
         }
 
+        // ★2026-11-15 利用時間の選択肢：一般は1時間から30分単位、メンバーは従来どおり1時間単位
+        function buildDurationOptions() {
+            const sel = document.getElementById('duration');
+            const step = (userType === 'member') ? 1 : 0.5;
+            const prev = parseFloat(sel.value) || 2;
+            let html = '';
+            for (let h = 1; h <= 6; h += step) {
+                const H = Math.floor(h), M = Math.round((h - H) * 60);
+                html += '<option value="' + h + '">' + (M ? H + '時間' + M + '分' : H + '時間') + '</option>';
+            }
+            sel.innerHTML = html;
+            const want = (step === 1) ? Math.round(prev) : prev;
+            sel.value = String(Math.min(6, Math.max(1, want)));
+            if (!sel.value) sel.value = '2';
+        }
+
         // 料金計算
         function calculatePrice() {
             const studio = selectedBooking.studio;
             const usageType = document.getElementById('usageType').value;
-            const duration = parseInt(document.getElementById('duration').value);
+            const duration = parseFloat(document.getElementById('duration').value);
             const isMember = userType === 'member';
             const startHour = selectedBooking.hour;
             const startMinute = selectedBooking.minute || 0;
@@ -1148,8 +1165,11 @@
                 let dayPrice = 0;
 
                 if (dayHours > 0) {
-                    if (nightHours === 0) {
-                        // 通常時間のみ：base 2h縛りを適用
+                    if (!isMember) {
+                        // ★2026-11-15 一般：1時間から・以降30分単位（時間単価×利用時間、2h縛りなし）
+                        dayPrice = dayHours * dayHourly;
+                    } else if (nightHours === 0) {
+                        // メンバー・通常時間のみ：base 2h縛りを適用
                         dayPrice = dayHours <= 2 ? dayBase : dayBase + (dayHours - 2) * dayHourly;
                     } else {
                         // 跨ぎ予約：通常時間部分も時間単価で按分（base縛りなし）
