@@ -22,7 +22,7 @@
 <div class="card">
   <div class="check">&#10003;</div>
   <h1>決済が完了しました</h1>
-  <p>ご予約ありがとうございます。<br>入室PINコード・利用案内を記載したメールを<br>お送りしましたのでご確認ください。</p>
+  <p>ご予約ありがとうございます。<br>入室PINコード・利用案内を記載したメールを<br>お送りします（数分以内に届きます）。</p>
   <p class="sid" id="sidLabel"></p>
   <div class="actions">
     <a class="btn" href="https://ids-chiba.github.io/ids-booking/">予約カレンダーに戻る</a>
@@ -32,7 +32,7 @@
 <script>
   // SIDをURLから取得して表示
   const params = new URLSearchParams(location.search);
-  const sid = params.get('sid') || params.get('SID');
+  const sid = params.get('sid') || params.get('SID') || params.get('pendingSid');
   if (sid) document.getElementById('sidLabel').textContent = '予約番号: ' + sid;
 </script>
 </body>
