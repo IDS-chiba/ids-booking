@@ -95,6 +95,8 @@
       .then(function (result) {
         if (result.status === "PENDING_PAYMENT") {
           try { localStorage.removeItem("ids_retry"); } catch (e) {}
+          // ★2026-11 fincode：決済URLへそのまま移動
+          if (result.__redirect) { window.location.href = result.__redirect; return; }
           post(result.paymentForUrl, result.formParams);
           return;
         }
