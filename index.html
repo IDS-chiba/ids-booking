@@ -601,7 +601,7 @@
 
             <div class="form-group">
                 <label>お支払い方法</label>
-                <select id="paymentMethod">
+                <select id="paymentMethod" onchange="idsOnPayMethodChange()">
                     <option value="credit">クレジットカード</option>
                     <option value="paypay">PayPay</option>
                 </select>
@@ -611,8 +611,9 @@
 
             <div class="button-group">
                 <button class="btn-secondary" onclick="closeModal()">キャンセル</button>
-                <button class="btn-primary" onclick="submitBooking()">予約確定</button>
+                <button class="btn-primary" id="bookingSubmitBtn" onclick="submitBooking()">予約確定</button>
             </div>
+            <div id="gpayBtnWrap" style="display:none; margin-top:12px; height:48px;"></div>
         </div>
     </div>
 
@@ -722,6 +723,7 @@
             }
 
             loadBookings();
+            try { idsLoadPayConfig(); } catch (e) {}   // ★2026-11 fincode / Google Pay
         };
 
         // 日付文字列(yyyy-mm-dd)にn日加算した日付文字列を返す
@@ -1069,6 +1071,7 @@
 
             buildDurationOptions();
             calculatePrice();
+            idsOnPayMethodChange();
             document.getElementById('bookingModal').classList.add('active');
         }
 
@@ -1184,7 +1187,7 @@
         }
 
         // 予約送信（新フロー：仮押さえ → 決済ページへ遷移）
-        function submitBooking() {
+        function submitBooking(gpayToken) {
             const name = document.getElementById('customerName').value;
             const email = document.getElementById('customerEmail').value;
             const phone = document.getElementById('customerPhone').value;
@@ -1216,6 +1219,8 @@
                 price: document.getElementById('priceDisplay').textContent,
                 paymentMethod: document.getElementById('paymentMethod').value
             };
+            // ★2026-11 Google Pay：支払いシートで受け取ったトークン（Base64）
+            if (gpayToken) data.gpayToken = gpayToken;
 
             // メンバーの場合はトークンを添付（GAS側で偽装ブロック）
             if (userType === 'member' && memberToken) {
@@ -1256,8 +1261,14 @@
                 console.log('create_pending 結果:', result);
 
                 if (result.status === 'PENDING_PAYMENT') {
-                    // 仮押さえ成功 → 決済ページへ自動遷移
-                    redirectToPayment(result.paymentForUrl, result.formParams);
+                    // 仮押さえ成功 → 決済ページへ自動遷移（fincodeは決済URLへそのまま移動）
+                    redirectToPayment(result.paymentForUrl, result.formParams, result);
+                    return;
+                }
+
+                // ★2026-11 Google Pay：その場で決済が完了した
+                if (result.status === 'PAID') {
+                    window.location.href = 'thanks.html?pendingSid=' + encodeURIComponent(result.sid || '');
                     return;
                 }
 
@@ -1269,6 +1280,8 @@
                     alert('メンバーセッションの有効期限が切れました。\n再度ログインしてください。');
                     _clearMemberSession();
                     renderCalendar();
+                } else if (result.status === 'PAYMENT_FAILED') {
+                    alert(result.message || 'お支払いを完了できませんでした。\n別のお支払い方法でお試しください。');
                 } else {
                     alert('予約処理中にエラーが発生しました。\n' + (result.message || JSON.stringify(result)));
                 }
@@ -1304,11 +1317,11 @@
         }
 
         // PaymentFor（リンク方式）へフォームを自動POSTして決済ページへ遷移
-        function redirectToPayment(actionUrl, params) {
+        function redirectToPayment(actionUrl, params, res) {
             // ★2026-09-17追加: 決済失敗時に再決済できるよう、SIDと予約内容を控えておく
             try {
                 localStorage.setItem('ids_retry', JSON.stringify({
-                    sid: params.SID,
+                    sid: (params && params.SID) || (res && res.sid) || '',
                     paymentMethod: (document.getElementById('paymentMethod') || {}).value || 'credit',
                     memberToken: localStorage.getItem('idsMemberToken') || '',
                     studio: document.getElementById('usageType').value === 'full' ? 'A+B Studio' : selectedBooking.studio + ' Studio',
@@ -1319,6 +1332,12 @@
                 }));
             } catch (e) {
                 console.warn('再決済用の情報を保存できませんでした', e);
+            }
+
+            // ★2026-11 fincode：決済URL（またはGoogle Payの認証ページ）へそのまま移動
+            if (res && res.__redirect) {
+                window.location.href = res.__redirect;
+                return;
             }
 
             const form = document.createElement('form');
@@ -1428,6 +1447,134 @@
                 }
             }, 250);
         });
+
+        // ============================================================
+        // ★2026-11 fincode / Google Pay
+        //   GASの pay_config で表示を切り替える（off / trial / on）。
+        //   trial のときは予約画面URLに ?paytest=1 を付けた人にだけ表示する。
+        // ============================================================
+        const IDS_PAY = { cfg: null, gpayClient: null, gpayReady: false };
+
+        function idsLoadPayConfig() {
+            fetch(API_URL + '?action=pay_config', { cache: 'no-store' })
+                .then(function (r) { return r.json(); })
+                .then(function (cfg) { IDS_PAY.cfg = cfg; idsInitGooglePay(); })
+                .catch(function () {});
+        }
+
+        function idsGpayAllowed() {
+            const c = IDS_PAY.cfg;
+            if (!c || !c.shopId) return false;
+            if (c.gpay === 'on') return true;
+            if (c.gpay === 'trial') {
+                try {
+                    if (/[?&]paytest=1/.test(location.search)) sessionStorage.setItem('ids_paytest', '1');
+                    return sessionStorage.getItem('ids_paytest') === '1';
+                } catch (e) { return false; }
+            }
+            return false;
+        }
+
+        function idsGpayCardMethod(withToken) {
+            const m = {
+                type: 'CARD',
+                parameters: {
+                    allowedAuthMethods: ['PAN_ONLY'],
+                    allowedCardNetworks: ['VISA', 'MASTERCARD', 'JCB', 'AMEX', 'DISCOVER']
+                }
+            };
+            if (withToken) {
+                m.tokenizationSpecification = {
+                    type: 'PAYMENT_GATEWAY',
+                    parameters: { gateway: 'fincode', gatewayMerchantId: IDS_PAY.cfg.shopId }
+                };
+            }
+            return m;
+        }
+
+        function idsInitGooglePay() {
+            if (!idsGpayAllowed()) return;
+            const s = document.createElement('script');
+            s.src = 'https://pay.google.com/gp/p/js/pay.js';
+            s.async = true;
+            s.onload = function () {
+                try {
+                    IDS_PAY.gpayClient = new google.payments.api.PaymentsClient({
+                        environment: IDS_PAY.cfg.gpayEnv === 'PRODUCTION' ? 'PRODUCTION' : 'TEST'
+                    });
+                    IDS_PAY.gpayClient.isReadyToPay({ apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods: [idsGpayCardMethod(false)] })
+                        .then(function (res) {
+                            if (!res || !res.result) return;
+                            IDS_PAY.gpayReady = true;
+                            const sel = document.getElementById('paymentMethod');
+                            if (sel && !sel.querySelector('option[value="googlepay"]')) {
+                                const o = document.createElement('option');
+                                o.value = 'googlepay';
+                                o.textContent = 'Google Pay';
+                                sel.appendChild(o);
+                            }
+                            const wrap = document.getElementById('gpayBtnWrap');
+                            if (wrap && !wrap.firstChild) {
+                                wrap.appendChild(IDS_PAY.gpayClient.createButton({
+                                    onClick: idsOnGooglePayClick,
+                                    buttonType: 'pay', buttonLocale: 'ja', buttonSizeMode: 'fill', buttonColor: 'black'
+                                }));
+                            }
+                        })
+                        .catch(function (e) { console.warn('Google Pay の利用可否を確認できませんでした', e); });
+                } catch (e) { console.warn('Google Pay の初期化に失敗しました', e); }
+            };
+            document.head.appendChild(s);
+        }
+
+        // お支払い方法が Google Pay のときは「予約確定」の代わりに Google Pay ボタンを出す
+        function idsOnPayMethodChange() {
+            const sel = document.getElementById('paymentMethod');
+            const isG = !!(sel && sel.value === 'googlepay');
+            const btn = document.getElementById('bookingSubmitBtn');
+            const wrap = document.getElementById('gpayBtnWrap');
+            if (btn) btn.style.display = isG ? 'none' : '';
+            if (wrap) wrap.style.display = isG ? '' : 'none';
+        }
+
+        // Google Payの支払いシートを開く前に入力内容を確認する（submitBooking と同じ条件）
+        function idsValidateBookingForm() {
+            const name = document.getElementById('customerName').value;
+            const email = document.getElementById('customerEmail').value;
+            const phone = document.getElementById('customerPhone').value;
+            if (!name || !email || !phone) {
+                alert('全ての項目を入力してください');
+                return false;
+            }
+            const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+            if (!EMAIL_RE.test(email.trim())) {
+                alert('メールアドレスの形式をご確認ください。\nカギの情報をお送りするため、正しいアドレスが必要です。');
+                return false;
+            }
+            return true;
+        }
+
+        function idsOnGooglePayClick() {
+            if (!IDS_PAY.gpayClient || !idsValidateBookingForm()) return;
+            const amount = String(parseInt(String(document.getElementById('priceDisplay').textContent).replace(/[^\d]/g, ''), 10) || 0);
+            if (amount === '0') { alert('料金を確認できませんでした。'); return; }
+            const merchantInfo = { merchantName: 'IDS（Inohana Dance Studio）' };
+            if (IDS_PAY.cfg.gpayMerchantId) merchantInfo.merchantId = IDS_PAY.cfg.gpayMerchantId;
+            IDS_PAY.gpayClient.loadPaymentData({
+                apiVersion: 2, apiVersionMinor: 0,
+                allowedPaymentMethods: [idsGpayCardMethod(true)],
+                transactionInfo: { currencyCode: 'JPY', countryCode: 'JP', totalPriceStatus: 'FINAL', totalPrice: amount },
+                merchantInfo: merchantInfo
+            }).then(function (pd) {
+                const token = pd && pd.paymentMethodData && pd.paymentMethodData.tokenizationData && pd.paymentMethodData.tokenizationData.token;
+                if (!token) { alert('Google Pay の情報を取得できませんでした。'); return; }
+                submitBooking(btoa(unescape(encodeURIComponent(token))));
+            }).catch(function (err) {
+                if (err && err.statusCode === 'CANCELED') return;
+                console.warn('Google Pay エラー', err);
+                alert('Google Pay をご利用いただけませんでした。\n別のお支払い方法でお試しください。');
+            });
+        }
     </script>
     <!-- ★2026-09-18追加: 決済ページ準備中の待ち画面 -->
     <div id="idsOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,0.94);z-index:9999;align-items:center;justify-content:center;text-align:center;padding:24px">
